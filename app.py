@@ -330,23 +330,62 @@ class PollinationsAI:
 # Initialize Pollinations AI
 pollinations = PollinationsAI()
 
-# Enhanced API key handling with fallback
+# Enhanced API key handling with multiple fallbacks
+api_key = None
+
+# Method 1: Try Streamlit secrets (for cloud deployment)
 try:
-    # First try from Streamlit secrets
     api_key = st.secrets["general"]["GROQ_API_KEY"]
-except Exception as e:
-    # Fallback to environment variable if needed
+except:
+    try:
+        # Alternative secrets format
+        api_key = st.secrets["GROQ_API_KEY"]
+    except:
+        pass
+
+# Method 2: Try environment variable (for local development)
+if not api_key:
     api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        st.error("Error: Groq API key not found. Please set it in Streamlit secrets or as an environment variable.")
+
+# Method 3: Manual input as last resort
+if not api_key:
+    st.error("🔑 Groq API Key Required")
+    st.markdown("""
+    **To use ChronoForge, you need a Groq API key:**
+    1. Get a free API key from [console.groq.com](https://console.groq.com/keys)
+    2. Enter it below or set it as an environment variable `GROQ_API_KEY`
+    3. For Streamlit Cloud deployment, add it to your app secrets
+    """)
+    
+    # Manual API key input
+    manual_key = st.text_input(
+        "Enter your Groq API key:", 
+        type="password",
+        help="Get your free API key from console.groq.com"
+    )
+    
+    if manual_key:
+        api_key = manual_key
+    else:
+        st.warning("Please enter your Groq API key to continue.")
         st.stop()
 
 # Initialize Groq client with enhanced error handling
-try:
-    groq_client = groq.Groq(api_key=api_key)
-except Exception as e:
-    st.error(f"Failed to initialize Groq client: {e}")
-    groq_client = None
+groq_client = None
+if api_key:
+    try:
+        groq_client = groq.Groq(api_key=api_key)
+        # Test the connection
+        test_response = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": "test"}],
+            model="llama3-8b-8192",
+            max_tokens=5
+        )
+        st.success("✅ Groq API connected successfully!")
+    except Exception as e:
+        st.error(f"❌ Failed to initialize Groq client: {e}")
+        st.error("Please check your API key and try again.")
+        groq_client = None
 
 # Define fallback models if primary models are unavailable
 FALLBACK_MODELS = {
@@ -575,8 +614,8 @@ def call_ai_gm(system_prompt: str, user_prompt: str, temperature: float = 0.7) -
     
     try:
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
         ]
         
         completion = safe_completion_create(

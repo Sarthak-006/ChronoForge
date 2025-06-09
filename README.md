@@ -33,21 +33,16 @@ A mystical RPG adventure powered by AI, where you embark on quests generated dyn
    cd chronoforge-ai-saga
    ```
 
-2. **Install dependencies:**
+2. **Follow the complete setup guide:**
+   📖 **[See SETUP_GUIDE.md for detailed instructions](SETUP_GUIDE.md)**
+
+3. **Quick start:**
    ```bash
    pip install -r requirements.txt
-   ```
-
-3. **Set up environment variables:**
-   ```bash
-   cp env.example .env
-   # Edit .env and add your GROQ_API_KEY
-   ```
-
-4. **Run the application:**
-   ```bash
    streamlit run app.py
    ```
+
+4. **Configure your API key** when prompted or set `GROQ_API_KEY` environment variable
 
 5. **Open your browser** to `http://localhost:8501`
 
