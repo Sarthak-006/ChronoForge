@@ -53,15 +53,26 @@ A mystical RPG adventure powered by AI, where you embark on quests generated dyn
 
 ## 🌐 Deployment Guide
 
-### Deploy on Streamlit Cloud (Recommended)
+### Deploy on Vercel (Landing Page)
 
 1. **Fork this repository** to your GitHub account
 
-2. **Get your Groq API key:**
+2. **Deploy on Vercel:**
+   - Go to [vercel.com](https://vercel.com/)
+   - Click "New Project"
+   - Import your GitHub repository
+   - Vercel will automatically detect the configuration
+   - Click "Deploy!"
+
+3. **Your landing page will be live** at a URL like: `https://yourappname.vercel.app`
+
+### Deploy the Main App on Streamlit Cloud
+
+1. **Get your Groq API key:**
    - Visit [Groq Console](https://console.groq.com/keys)
    - Create a free account and generate an API key
 
-3. **Deploy on Streamlit Cloud:**
+2. **Deploy on Streamlit Cloud:**
    - Go to [share.streamlit.io](https://share.streamlit.io/)
    - Click "New app"
    - Connect your GitHub account
@@ -72,7 +83,7 @@ A mystical RPG adventure powered by AI, where you embark on quests generated dyn
      - Variable value: Your actual Groq API key
    - Click "Deploy!"
 
-4. **Your app will be live** at a URL like: `https://yourappname.streamlit.app`
+3. **Your app will be live** at a URL like: `https://yourappname.streamlit.app`
 
 ### Alternative: Deploy on Heroku
 

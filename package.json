@@ -1,0 +1,27 @@
+{
+    "name": "chronoforge-ai-saga",
+    "version": "1.0.0",
+    "description": "A mystical RPG adventure powered by AI",
+    "main": "index.html",
+    "scripts": {
+        "build": "echo 'Static build complete'",
+        "start": "echo 'Serving static files'"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/yourusername/chronoforge-ai-saga.git"
+    },
+    "keywords": [
+        "streamlit",
+        "ai",
+        "rpg",
+        "game",
+        "groq",
+        "artificial-intelligence"
+    ],
+    "author": "ChronoForge Team",
+    "license": "ISC",
+    "engines": {
+        "node": ">=14.0.0"
+    }
+}
