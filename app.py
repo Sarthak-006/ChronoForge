@@ -330,23 +330,108 @@ class PollinationsAI:
 # Initialize Pollinations AI
 pollinations = PollinationsAI()
 
-# Initialize Groq client
+# Enhanced API key handling with fallback
 try:
-    # Try to get API key from Streamlit secrets first (for Streamlit Cloud)
-    if hasattr(st, 'secrets') and 'general' in st.secrets and 'api_key' in st.secrets.general:
-        api_key = st.secrets.general.api_key
-    # Fallback to environment variable for local development
-    elif os.getenv("GROQ_API_KEY"):
-        api_key = os.getenv("GROQ_API_KEY")
-    else:
-        raise ValueError("API key not found. Please check your Streamlit secrets or environment variables.")
-    
+    # First try from Streamlit secrets
+    api_key = st.secrets["general"]["GROQ_API_KEY"]
+except Exception as e:
+    # Fallback to environment variable if needed
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        st.error("Error: Groq API key not found. Please set it in Streamlit secrets or as an environment variable.")
+        st.stop()
+
+# Initialize Groq client with enhanced error handling
+try:
     groq_client = groq.Groq(api_key=api_key)
-    MODEL_NAME = "llama-3.3-70b-versatile"
 except Exception as e:
     st.error(f"Failed to initialize Groq client: {e}")
-    st.error("Please make sure your API key is properly configured in Streamlit secrets.")
     groq_client = None
+
+# Define fallback models if primary models are unavailable
+FALLBACK_MODELS = {
+    "llama-3.3-70b-versatile": "llama3-8b-8192",  # Fallback to smaller Llama if larger is unavailable
+    "mixtral-8x7b-32768": "llama3-8b-8192",       # Fallback to Llama if Mixtral is unavailable
+    "llama3-70b-8192": "llama3-8b-8192"           # Fallback to smaller model
+}
+
+# Updated model definitions
+MODEL_NAME = "llama-3.3-70b-versatile"
+FAST_MODEL = "llama3-8b-8192"
+CREATIVE_MODEL = "mixtral-8x7b-32768"
+
+# Helper function to validate API messages
+def validate_messages(messages):
+    """Ensure all message content fields are strings to prevent Groq API errors"""
+    for msg in messages:
+        if 'content' in msg and msg['content'] is not None and not isinstance(msg['content'], str):
+            msg['content'] = str(msg['content'])
+    return messages
+
+# Helper function to attempt API call with fallback models
+def safe_completion_create(messages, model, temperature, max_tokens, **kwargs):
+    """Try to create a completion with fallback to alternative models if needed"""
+    if not groq_client:
+        raise Exception("Groq client not initialized")
+    
+    try:
+        return groq_client.chat.completions.create(
+            messages=validate_messages(messages),
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs
+        )
+    except Exception as primary_error:
+        # If we have a fallback model for this one, try it
+        fallback_model = FALLBACK_MODELS.get(model)
+        if fallback_model:
+            try:
+                log_event(f"⚠️ Primary model {model} unavailable. Using fallback model {fallback_model}.")
+                return groq_client.chat.completions.create(
+                    messages=validate_messages(messages),
+                    model=fallback_model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs
+                )
+            except Exception as fallback_error:
+                # Both primary and fallback failed
+                raise Exception(f"Primary error: {str(primary_error)}. Fallback error: {str(fallback_error)}")
+        else:
+            # No fallback available, raise the original error
+            raise primary_error
+
+# Function to check API health
+def check_api_health():
+    """Check if the Groq API is working properly"""
+    if not groq_client:
+        return False, "Groq client not initialized"
+    
+    try:
+        # Simple test call
+        test_messages = [{"role": "user", "content": "Hello"}]
+        response = safe_completion_create(
+            messages=test_messages,
+            model=FAST_MODEL,  # Use fastest model for health check
+            temperature=0.1,
+            max_tokens=10
+        )
+        return True, "API is healthy"
+    except Exception as e:
+        return False, f"API error: {str(e)[:100]}..."
+
+# Enhanced error handling wrapper
+def with_error_handling(func):
+    """Decorator to add consistent error handling to functions"""
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            st.error(f"An error occurred: {str(e)[:100]}...")
+            log_event(f"ERROR in {func.__name__}: {e}")
+            return None
+    return wrapper
 
 # --- 3. ENHANCED GAME STATE MANAGEMENT ---
 
@@ -483,22 +568,25 @@ def check_achievements():
         update_shard_history()
 
 def call_ai_gm(system_prompt: str, user_prompt: str, temperature: float = 0.7) -> str:
-    """Enhanced AI Game Master with better error handling"""
+    """Enhanced AI Game Master with better error handling and fallback models"""
     if not groq_client:
         st.error("AI Game Master is unavailable. Please check your API configuration.")
         return None
     
     try:
-        completion = groq_client.chat.completions.create(
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        completion = safe_completion_create(
+            messages=messages,
             model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
             temperature=temperature,
             max_tokens=2048,
-            response_format={"type": "json_object"},
+            response_format={"type": "json_object"}
         )
+        
         response_content = completion.choices[0].message.content
         log_event(f"🤖 AI GM Response received")
         return response_content
@@ -508,7 +596,7 @@ def call_ai_gm(system_prompt: str, user_prompt: str, temperature: float = 0.7) -
         return None
 
 def generate_scenario_and_quest():
-    """Enhanced quest generation with better variety"""
+    """Enhanced quest generation with better variety using primary model"""
     system_prompt = """
     You are the ultimate Game Master for 'ChronoForge', a mystical realm where magic meets technology.
     Create an immersive scenario and challenging quest based on the player's progression.
@@ -560,6 +648,53 @@ def generate_scenario_and_quest():
         except (json.JSONDecodeError, KeyError) as e:
             st.error("The mystical energies are disrupted. Try exploring again.")
             log_event(f"ERROR: Failed to parse quest data: {e}")
+
+def generate_quick_quest():
+    """Generate a simpler quest using the fast model for quick gameplay"""
+    system_prompt = """
+    You are a ChronoForge quest generator. Create a simple, quick quest for immediate play.
+    
+    Generate a short scenario and simple quest. Keep it accessible and fun.
+    
+    Output ONLY valid JSON with keys: 'scenario', 'quest'.
+    Quest object needs: 'title', 'description', 'reward' (25-150), 'challenge', 'difficulty' (1-3).
+    """
+    
+    player_level = st.session_state.player_data['level']
+    user_prompt = f"""
+    Player Level: {player_level}
+    Generate a quick, simple quest suitable for immediate play.
+    """
+    
+    try:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        completion = safe_completion_create(
+            messages=messages,
+            model=FAST_MODEL,  # Use fast model for quick quests
+            temperature=0.8,
+            max_tokens=1024,
+            response_format={"type": "json_object"}
+        )
+        
+        response_str = completion.choices[0].message.content
+        log_event(f"⚡ Quick Quest generated using {FAST_MODEL}")
+        
+        if response_str:
+            try:
+                data = json.loads(response_str)
+                st.session_state.current_scenario = data['scenario']
+                st.session_state.active_quest = data['quest']
+                log_event(f"⚡ Quick Quest: {data['quest']['title']}")
+            except (json.JSONDecodeError, KeyError) as e:
+                st.error("Quick quest generation failed. Try the regular quest instead.")
+                log_event(f"ERROR: Failed to parse quick quest data: {e}")
+    except Exception as e:
+        st.error(f"Quick quest generation error: {str(e)[:50]}...")
+        log_event(f"ERROR: Quick quest generation failed: {e}")
 
 def evaluate_quest_solution(quest: Dict[str, Any], solution: str):
     """Enhanced quest evaluation with dynamic rewards"""
@@ -708,6 +843,23 @@ def render_enhanced_sidebar():
                 st.caption(event)
         else:
             st.caption("Your journey begins...")
+        
+        # API Status indicator
+        st.markdown("### 🔌 System Status")
+        if st.button("🔄 Check API Health", help="Test connection to AI Game Master"):
+            with st.spinner("Testing connection..."):
+                is_healthy, status_msg = check_api_health()
+                if is_healthy:
+                    st.success("✅ " + status_msg)
+                else:
+                    st.error("❌ " + status_msg)
+        
+        # Show current model info
+        with st.expander("🤖 AI Models Info"):
+            st.write(f"**Primary Model**: {MODEL_NAME}")
+            st.write(f"**Fast Model**: {FAST_MODEL}")
+            st.write(f"**Creative Model**: {CREATIVE_MODEL}")
+            st.write("**Fallback System**: Enabled")
 
 def render_main_dashboard():
     """Enhanced main dashboard with tabs and rich content"""
@@ -814,11 +966,19 @@ def render_quest_hub():
             </div>
             """, unsafe_allow_html=True)
             
-            if st.button("🌟 Discover New Quest", type="primary", key="new_quest"):
-                with st.spinner("Consulting the mystical forces..."):
-                    time.sleep(2)
-                    generate_scenario_and_quest()
-                    st.rerun()
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🌟 Discover New Quest", type="primary", key="new_quest"):
+                    with st.spinner("Consulting the mystical forces..."):
+                        time.sleep(1)
+                        generate_scenario_and_quest()
+                        st.rerun()
+            
+            with col2:
+                if st.button("⚡ Quick Quest", help="Generate a simpler quest using fast model"):
+                    with st.spinner("Generating quick adventure..."):
+                        generate_quick_quest()
+                        st.rerun()
     
     with col2:
         # Quick stats
