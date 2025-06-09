@@ -1,7 +1,6 @@
 import streamlit as st
 import groq
 import os
-from dotenv import load_dotenv
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -17,9 +16,6 @@ from PIL import Image
 import numpy as np
 
 # --- 1. CONFIGURATION & INITIALIZATION ---
-
-# Load environment variables from .env file
-load_dotenv()
 
 # Set up Streamlit page config with enhanced styling
 st.set_page_config(
@@ -336,10 +332,20 @@ pollinations = PollinationsAI()
 
 # Initialize Groq client
 try:
-    groq_client = groq.Groq(api_key=os.getenv("GROQ_API_KEY"))
+    # Try to get API key from Streamlit secrets first (for Streamlit Cloud)
+    if hasattr(st, 'secrets') and 'general' in st.secrets and 'api_key' in st.secrets.general:
+        api_key = st.secrets.general.api_key
+    # Fallback to environment variable for local development
+    elif os.getenv("GROQ_API_KEY"):
+        api_key = os.getenv("GROQ_API_KEY")
+    else:
+        raise ValueError("API key not found. Please check your Streamlit secrets or environment variables.")
+    
+    groq_client = groq.Groq(api_key=api_key)
     MODEL_NAME = "llama-3.3-70b-versatile"
 except Exception as e:
     st.error(f"Failed to initialize Groq client: {e}")
+    st.error("Please make sure your API key is properly configured in Streamlit secrets.")
     groq_client = None
 
 # --- 3. ENHANCED GAME STATE MANAGEMENT ---
